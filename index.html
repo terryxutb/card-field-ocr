@@ -198,6 +198,27 @@
     .hint { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
     .drop[contenteditable="true"] { caret-color: transparent; }
     .drop[contenteditable="true"]:focus { border-color: var(--accent); background: #f0fdf4; }
+
+    .paste-mask {
+      display: none;
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(15, 23, 42, 0.55);
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .paste-mask.show { display: flex; }
+    .paste-card {
+      background: #fff; border-radius: 18px; padding: 22px 20px;
+      width: min(420px, 100%); box-shadow: 0 20px 50px rgba(0,0,0,.25);
+      text-align: center;
+    }
+    .paste-card h3 { margin: 0 0 8px; font-size: 18px; }
+    .paste-card p { margin: 0 0 14px; color: #6b7280; font-size: 14px; line-height: 1.6; }
+    .paste-trap {
+      width: 100%; min-height: 88px; border: 2px dashed #86efac; border-radius: 12px;
+      background: #f0fdf4; color: #166534; display: flex; align-items: center; justify-content: center;
+      font-weight: 600; outline: none;
+    }
   </style>
 </head>
 <body>
@@ -215,24 +236,23 @@
       当前是本地文件打开，粘贴截图可能失败。请用在线网页版，或改用「选择图片 / 拖入」。
     </div>
     <div id="okLocal" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:14px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:13px;line-height:1.55">
-      网页已就绪：复制截图后点 <b>从剪贴板读取</b>，或 Ctrl+V / 拖入 / 选择图片。
+      网页已就绪：截图后点 <b>粘贴截图</b>。若浏览器拦截，会弹出窗口让你按 Ctrl+V。
     </div>
 
     <div class="grid">
       <section class="panel">
         <h2>1. 粘贴截图</h2>
-        <div class="drop" id="drop" tabindex="0" role="button" aria-label="粘贴图片区域"
-             contenteditable="true" spellcheck="false" autocomplete="off">
-          <div class="preview-empty" id="emptyHint" contenteditable="false">
-            优先点下方 <b>从剪贴板读取</b>（最稳）<br />
-            也可点这里后 Ctrl+V，或拖入 / 选择图片
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="粘贴图片区域">
+          <div class="preview-empty" id="emptyHint">
+            先 <b>Win+Shift+S</b> 截图，再点下方 <b>粘贴截图</b><br />
+            或直接在本页按 <b>Ctrl+V</b>，也可拖入 / 选择图片
           </div>
-          <img id="preview" alt="" style="display:none" contenteditable="false" />
+          <img id="preview" alt="" style="display:none" />
         </div>
         <input type="file" id="fileInput" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp" hidden />
         <div class="actions">
-          <button class="primary" id="pickBtn" type="button">选择图片</button>
-          <button class="ghost" id="clipBtn" type="button">从剪贴板读取</button>
+          <button class="primary" id="clipBtn" type="button">粘贴截图</button>
+          <button class="ghost" id="pickBtn" type="button">选择图片</button>
           <button class="ghost" id="ocrBtn" type="button">重新识别</button>
           <button class="ghost" id="clearBtn" type="button">清空</button>
         </div>
@@ -262,6 +282,18 @@
       <div class="hint">已加强标签分段与杂质过滤（如 Copy 按钮文字）。若仍有单项不准，直接改右侧输入框再复制即可。</div>
     </section>
   </div>
+  
+  <div class="paste-mask" id="pasteMask" aria-hidden="true">
+    <div class="paste-card">
+      <h3>在这里按 Ctrl + V</h3>
+      <p>请先用 Win+Shift+S 截图，然后立刻在下方虚线框按 Ctrl+V。<br/>浏览器拦截直接读剪贴板时，用这个最稳。</p>
+      <div class="paste-trap" id="pasteTrap" tabindex="0">点这里，再按 Ctrl + V</div>
+      <div class="actions" style="justify-content:center;margin-top:14px">
+        <button class="ghost" type="button" id="pasteCancel">取消</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast">已复制</div>
 
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -662,10 +694,7 @@
 
     function isTypingTarget(el) {
       if (!el) return false;
-      if (el === drop || (drop && drop.contains(el) && el !== document.getElementById("raw"))) {
-        // drop zone is contenteditable but meant for image paste only
-        if (el === drop || el.id === "emptyHint" || el.id === "preview") return false;
-      }
+      if (el.id === "pasteTrap") return false;
       const tag = (el.tagName || "").toLowerCase();
       return tag === "textarea" || (tag === "input" && el.type !== "file" && el.type !== "button");
     }
@@ -674,7 +703,6 @@
       const cd = e && e.clipboardData;
       if (!cd) return null;
 
-      // 1) items (Chrome / most browsers)
       try {
         const items = cd.items ? Array.from(cd.items) : [];
         for (const item of items) {
@@ -684,13 +712,36 @@
             if (f) return f;
           }
         }
+        for (const item of items) {
+          if (item.kind === "file") {
+            const f = item.getAsFile && item.getAsFile();
+            if (f && ((f.type || "").startsWith("image/") || !f.type)) return f;
+          }
+        }
       } catch (_) {}
 
-      // 2) files list (Firefox sometimes)
       try {
         const files = cd.files ? Array.from(cd.files) : [];
         const img = files.find(f => (f.type || "").startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || ""));
         if (img) return img;
+      } catch (_) {}
+
+      try {
+        const html = cd.getData && cd.getData("text/html");
+        if (html) {
+          const m = String(html).match(/<img[^>]+src=["'](data:image\/[a-zA-Z0-9+.-]+;base64,[^"']+)["']/i);
+          if (m) {
+            const dataUrl = m[1];
+            const comma = dataUrl.indexOf(",");
+            const meta = dataUrl.slice(0, comma);
+            const b64 = dataUrl.slice(comma + 1);
+            const mime = (meta.match(/data:(image\/[a-zA-Z0-9+.-]+)/) || [])[1] || "image/png";
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            return new File([arr], "clipboard.png", { type: mime });
+          }
+        }
       } catch (_) {}
 
       return null;
@@ -703,95 +754,69 @@
     async function fileFromLocalServerClipboard() {
       if (!isLocalHttp()) return null;
       const res = await fetch("/api/clipboard-image?t=" + Date.now(), { cache: "no-store" });
-      if (res.status === 204) {
-        throw new Error("剪贴板里没有图片。请先 Win+Shift+S 截图，再点「从剪贴板读取」。");
-      }
-      if (!res.ok) {
-        const msg = await res.text().catch(() => "");
-        throw new Error(msg || ("本机剪贴板读取失败 (" + res.status + ")"));
-      }
+      if (res.status === 204) throw new Error("EMPTY_CLIPBOARD");
+      if (!res.ok) throw new Error("LOCAL_CLIP_FAIL");
       const blob = await res.blob();
-      if (!blob || !blob.size) {
-        throw new Error("剪贴板图片为空，请重新截图后再试。");
-      }
+      if (!blob || !blob.size) throw new Error("EMPTY_CLIPBOARD");
       return new File([blob], "clipboard.png", { type: blob.type || "image/png" });
     }
 
     async function fileFromClipboardApi() {
-      // Prefer Windows-side clipboard via local server (bypasses browser paste blocks)
       try {
         const local = await fileFromLocalServerClipboard();
         if (local) return local;
       } catch (err) {
         if (isLocalHttp()) throw err;
       }
-      if (!navigator.clipboard || !navigator.clipboard.read) {
-        throw new Error("浏览器不支持直接读剪贴板，请改用 Ctrl+V、拖入或「选择图片」。");
-      }
+      if (!navigator.clipboard || !navigator.clipboard.read) throw new Error("NO_CLIPBOARD_READ");
       const items = await navigator.clipboard.read();
       for (const item of items) {
-        const type = (item.types || []).find(t => String(t).startsWith("image/"));
-        if (!type) continue;
-        const blob = await item.getType(type);
-        const ext = type.split("/")[1] || "png";
-        return new File([blob], "clipboard." + ext, { type: type });
+        for (const type of (item.types || [])) {
+          if (!String(type).startsWith("image/")) continue;
+          const blob = await item.getType(type);
+          const ext = String(type).split("/")[1] || "png";
+          return new File([blob], "clipboard." + ext, { type: type });
+        }
       }
-      throw new Error("剪贴板里没有图片。请先复制截图，再点「从剪贴板读取」。");
+      throw new Error("EMPTY_CLIPBOARD");
     }
 
-    async function handlePasteEvent(e) {
-      // Always try image first; only ignore when typing in raw/fields text boxes
+    const pasteMask = document.getElementById("pasteMask");
+    const pasteTrap = document.getElementById("pasteTrap");
+
+    function openPasteMask(msg) {
+      if (msg) setStatus(msg);
+      pasteMask.classList.add("show");
+      pasteMask.setAttribute("aria-hidden", "false");
+      setTimeout(() => { try { pasteTrap.focus(); } catch (_) {} }, 30);
+    }
+    function closePasteMask() {
+      pasteMask.classList.remove("show");
+      pasteMask.setAttribute("aria-hidden", "true");
+    }
+
+    function handlePasteEvent(e) {
       if (isTypingTarget(e.target) && e.target.id === "raw") return;
       if (isTypingTarget(e.target) && e.target.tagName === "INPUT" && e.target.closest("#fields")) return;
 
-      let file = fileFromClipboardEvent(e);
+      const file = fileFromClipboardEvent(e);
       if (file) {
         e.preventDefault();
         e.stopPropagation();
-        // Clear any text accidentally pasted into contenteditable drop
-        sanitizeDropDom();
+        closePasteMask();
         acceptImage(file, true);
         return;
       }
 
-      // Firefox / file:// fallback: Clipboard API needs a user gesture; paste counts
-      if (navigator.clipboard && navigator.clipboard.read) {
-        try {
-          file = await fileFromClipboardApi();
-          e.preventDefault();
-          e.stopPropagation();
-          sanitizeDropDom();
-          acceptImage(file, true);
-          return;
-        } catch (err) {
-          // fall through to message
-          console.warn(err);
-        }
-      }
-
-      if (!isTypingTarget(e.target)) {
+      if (pasteMask.classList.contains("show") || e.target === pasteTrap) {
         e.preventDefault();
-        sanitizeDropDom();
-        toast("粘贴不到图片时，请点「选择图片」或「从剪贴板读取」");
-        setStatus("若 Ctrl+V 无效（常见于本地 HTML + 火狐），请用「选择图片」或「从剪贴板读取」。");
+        e.stopPropagation();
+        toast("这次粘贴里没有图片，请先 Win+Shift+S 截图再 Ctrl+V");
+        setStatus("剪贴板里还没有图片。请先截图，再在弹窗里 Ctrl+V。");
       }
     }
 
-    function sanitizeDropDom() {
-      // Keep only emptyHint + preview; remove any pasted text nodes/HTML
-      Array.from(drop.childNodes).forEach(node => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          if (node.id === "emptyHint" || node.id === "preview") return;
-          node.remove();
-        } else {
-          node.remove();
-        }
-      });
-      drop.querySelectorAll("br,div,span,img:not(#preview),font").forEach(n => {
-        if (n.id === "preview") return;
-        n.remove();
-      });
-    }
+    function sanitizeDropDom() {}
 
     async function preprocessImage(file) {
       const bmp = await createImageBitmap(file);
@@ -868,14 +893,9 @@
     }
 
     drop.addEventListener("click", () => {
-      drop.focus();
+      try { drop.focus(); } catch (_) {}
+      openPasteMask("请在弹窗里按 Ctrl+V 粘贴截图。");
     });
-    drop.addEventListener("keydown", e => {
-      // Allow Ctrl/Meta+V only; block typed characters into contenteditable
-      const isPaste = (e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === "v";
-      if (!isPaste && !e.ctrlKey && !e.metaKey) e.preventDefault();
-    });
-    drop.addEventListener("input", () => sanitizeDropDom());
     drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag"); });
     drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
     drop.addEventListener("drop", e => {
@@ -888,7 +908,6 @@
     });
 
     document.addEventListener("paste", handlePasteEvent, true);
-    drop.addEventListener("paste", handlePasteEvent);
 
     const fileInput = document.getElementById("fileInput");
     document.getElementById("pickBtn").addEventListener("click", () => fileInput.click());
@@ -904,10 +923,14 @@
         acceptImage(f, true);
       } catch (err) {
         console.warn(err);
-        toast(err && err.message ? err.message : "读取剪贴板失败");
-        setStatus("读取剪贴板失败时，请改用「选择图片」或把截图拖进虚线框。");
+        openPasteMask("请在弹窗虚线框内按 Ctrl+V 粘贴截图。");
+        toast("请在弹窗中按 Ctrl+V");
       }
     });
+
+    document.getElementById("pasteCancel").addEventListener("click", closePasteMask);
+    pasteMask.addEventListener("click", e => { if (e.target === pasteMask) closePasteMask(); });
+    pasteTrap.addEventListener("click", () => { try { pasteTrap.focus(); } catch (_) {} });
 
     document.getElementById("ocrBtn").addEventListener("click", () => recognizeImage(currentFile, false));
     // Focus paste zone on load for quicker Ctrl+V
