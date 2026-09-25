@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>图片文字提取器 · 分类复制</title>
+  <style>
+    :root {
+      --bg: #f3f5f7;
+      --card: #ffffff;
+      --ink: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #16a34a;
+      --accent-soft: #dcfce7;
+      --accent-hover: #15803d;
+      --shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(1200px 400px at 10% -10%, #e8fff0 0%, transparent 50%),
+        radial-gradient(800px 300px at 100% 0%, #eef2ff 0%, transparent 45%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 28px 18px 48px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      letter-spacing: -0.03em;
+    }
+    .sub { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    .badge {
+      background: var(--accent-soft);
+      color: var(--accent-hover);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 16px;
+    }
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+      header { flex-direction: column; align-items: flex-start; }
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 16px;
+    }
+    .drop {
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 16px;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      color: var(--muted);
+      background: #fafbfc;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+    .drop.drag, .drop:focus {
+      border-color: var(--accent);
+      background: #f0fdf4;
+      outline: none;
+    }
+    .drop img {
+      max-width: 100%;
+      max-height: 320px;
+      display: block;
+      object-fit: contain;
+    }
+    .preview-empty { padding: 24px; }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    button, .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .primary { background: var(--accent); color: #fff; }
+    .primary:hover { background: var(--accent-hover); }
+    .ghost {
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .ghost:hover { background: #e5e7eb; }
+    .copy-mini {
+      background: var(--accent);
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      flex: 0 0 auto;
+    }
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 20px;
+    }
+    .field {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      padding: 10px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .field:last-child { border-bottom: 0; }
+    .field-body { flex: 1; min-width: 0; }
+    .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    textarea, input[type="text"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      resize: vertical;
+      background: #fff;
+      color: var(--ink);
+    }
+    textarea { min-height: 64px; }
+    .raw {
+      width: 100%;
+      min-height: 120px;
+      margin-top: 8px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      background: #111827;
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+      z-index: 20;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .hint { font-size: 12px; color: var(--muted); line-height: 1.6; margin-top: 8px; }
+    .drop[contenteditable="true"] { caret-color: transparent; }
+    .drop[contenteditable="true"]:focus { border-color: var(--accent); background: #f0fdf4; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>图片文字提取器</h1>
+        <div class="sub">打开本页即可用：粘贴截图或选图，自动识别并按结账字段分类复制。</div>
+      </div>
+      <div class="badge">网页版 · 识别在浏览器本地完成</div>
+    </header>
+
+    
+    <div id="fileWarn" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:14px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:13px;line-height:1.55">
+      当前是本地文件打开，粘贴截图可能失败。请用在线网页版，或改用「选择图片 / 拖入」。
+    </div>
+    <div id="okLocal" style="display:none;margin-bottom:14px;padding:12px 14px;border-radius:14px;background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46;font-size:13px;line-height:1.55">
+      网页已就绪：复制截图后点 <b>从剪贴板读取</b>，或 Ctrl+V / 拖入 / 选择图片。
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>1. 粘贴截图</h2>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="粘贴图片区域"
+             contenteditable="true" spellcheck="false" autocomplete="off">
+          <div class="preview-empty" id="emptyHint" contenteditable="false">
+            优先点下方 <b>从剪贴板读取</b>（最稳）<br />
+            也可点这里后 Ctrl+V，或拖入 / 选择图片
+          </div>
+          <img id="preview" alt="" style="display:none" contenteditable="false" />
+        </div>
+        <input type="file" id="fileInput" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp" hidden />
+        <div class="actions">
+          <button class="primary" id="pickBtn" type="button">选择图片</button>
+          <button class="ghost" id="clipBtn" type="button">从剪贴板读取</button>
+          <button class="ghost" id="ocrBtn" type="button">重新识别</button>
+          <button class="ghost" id="clearBtn" type="button">清空</button>
+        </div>
+        <div class="status" id="status">可 Ctrl+V 粘贴、拖入，或点「选择图片 / 从剪贴板读取」。本地文件打开时若粘贴被拦截，请用后两个按钮。</div>
+      </section>
+
+      <section class="panel">
+        <h2>2. 分类结果</h2>
+        <div class="toolbar">
+          <button class="primary" id="copyAll" type="button">复制全部分类</button>
+          <button class="ghost" id="copyBilling" type="button">复制账单信息</button>
+          <button class="ghost" id="copyPay" type="button">复制付款信息</button>
+          <button class="ghost" id="copyCardCompact" type="button">复制卡号（无空格）</button>
+          <button class="ghost" id="copyAddress" type="button">复制完整地址</button>
+        </div>
+        <div id="fields"></div>
+      </section>
+    </div>
+
+    <section class="panel" style="margin-top:16px">
+      <h2>3. 原始识别文本</h2>
+      <textarea class="raw" id="raw" placeholder="OCR 原文会显示在这里，也可手动粘贴文字后点「从原文分类」。"></textarea>
+      <div class="actions">
+        <button class="ghost" id="parseRaw" type="button">从原文分类</button>
+        <button class="ghost" id="copyRaw" type="button">复制原文</button>
+      </div>
+      <div class="hint">已加强标签分段与杂质过滤（如 Copy 按钮文字）。若仍有单项不准，直接改右侧输入框再复制即可。</div>
+    </section>
+  </div>
+  <div class="toast" id="toast">已复制</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script>
+    const FIELDS = [
+      ["holder", "全名 Full name"],
+      ["country", "国家/地区 Country"],
+      ["address1", "地址第1行 Address line 1"],
+      ["address2", "地址第2行 Address line 2"],
+      ["city", "城市 Town or city"],
+      ["postcode", "邮编 Postal code"],
+      ["company", "公司名 Business name"],
+      ["taxIdType", "税号类型 Tax ID type"],
+      ["vat", "VAT / 税号"],
+      ["invoiceName", "发票名称 Name on invoice"],
+      ["address", "账单地址（完整一行）"],
+      ["numberSpaced", "卡号（带空格）"],
+      ["numberPlain", "卡号（无空格）"],
+      ["expiry", "有效期 Expiration"],
+      ["expiryMonth", "有效期-月 MM"],
+      ["expiryYear", "有效期-年 YY"],
+      ["cvv", "安全码 CVC"]
+    ];
+
+    const LABEL_WORDS = /^(card\s*details|cardholder\s*name|cardholder|card\s*number|expiry\s*date|expiry|security\s*code|cvv|cvc|billing\s*address|copy|done|持卡人|卡号|有效期|安全码|账单地址)$/i;
+    const UI_NOISE = /\b(copy|copied|done|edit|close|card\s*details)\b/gi;
+    const NEXT_LABELS = /\b(card\s*number|expiry\s*date|security\s*code|billing\s*address|cardholder\s*name|cvv|cvc)\b/i;
+
+    const fieldsEl = document.getElementById("fields");
+    const values = Object.fromEntries(FIELDS.map(([k]) => [k, ""]));
+
+    function renderFields() {
+      fieldsEl.innerHTML = FIELDS.map(([key, label]) => `
+        <div class="field">
+          <div class="field-body">
+            <div class="label">${label}</div>
+            <input type="text" data-key="${key}" value="${escapeHtml(values[key] || "")}" />
+          </div>
+          <button class="copy-mini" type="button" data-copy="${key}">复制</button>
+        </div>
+      `).join("");
+      fieldsEl.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", () => {
+          values[input.dataset.key] = input.value;
+        });
+      });
+      fieldsEl.querySelectorAll("[data-copy]").forEach(btn => {
+        btn.addEventListener("click", () => copyText(values[btn.dataset.copy] || "", btn.dataset.copy));
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+      }[c]));
+    }
+
+    function toast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 1400);
+    }
+
+    async function copyText(text, label) {
+      const value = (text || "").trim();
+      if (!value) { toast("这一项是空的"); return; }
+      try {
+        await navigator.clipboard.writeText(value);
+        toast("已复制：" + (labelName(label) || "内容"));
+      } catch {
+        toast("复制失败，请手动选择");
+      }
+    }
+
+    function labelName(key) {
+      return (FIELDS.find(x => x[0] === key) || [])[1] || key;
+    }
+
+    function setStatus(t) {
+      document.getElementById("status").textContent = t;
+    }
+
+    function normalizeOcrText(text) {
+      return String(text || "")
+        .replace(/\r/g, "\n")
+        .replace(/[|]/g, "I")
+        .replace(/[‘’]/g, "'")
+        .replace(/[“”]/g, '"')
+        .replace(/[–—]/g, "-")
+        .replace(/\u00a0/g, " ");
+    }
+
+    function cleanupLines(text) {
+      return normalizeOcrText(text)
+        .split("\n")
+        .map(s => s.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .filter(l => !LABEL_WORDS.test(l.replace(/[:：]/g, "").trim()) || /name|number|date|code|address/i.test(l));
+    }
+
+    function isJunkLine(line) {
+      const t = line.replace(/[:：]/g, "").trim();
+      if (!t) return true;
+      if (/^(copy|copied|done|edit|close|ok|save)$/i.test(t)) return true;
+      if (LABEL_WORDS.test(t)) return true;
+      return false;
+    }
+
+    function isLabelLine(line, patterns) {
+      const t = line.replace(/[:：]/g, "").trim();
+      return patterns.some(re => re.test(t));
+    }
+
+    function valueAfterLabel(lines, labelPatterns) {
+      for (let i = 0; i < lines.length; i++) {
+        if (!isLabelLine(lines[i], labelPatterns)) continue;
+        // same-line value: "Cardholder name: JOHN DOE"
+        const same = lines[i].split(/[:：]/);
+        if (same.length > 1) {
+          const rest = same.slice(1).join(":").trim();
+          if (rest && !isJunkLine(rest)) return rest;
+        }
+        for (let j = i + 1; j < lines.length; j++) {
+          if (isJunkLine(lines[j])) continue;
+          if (isLabelLine(lines[j], [
+            /^cardholder/i, /^card\s*number/i, /^expiry/i,
+            /^security\s*code/i, /^cvv$/i, /^cvc$/i, /^billing\s*address/i,
+            /^card\s*details$/i
+          ])) break;
+          return lines[j];
+        }
+      }
+      return "";
+    }
+
+    function cleanHolder(name) {
+      let s = String(name || "");
+      s = s.split(NEXT_LABELS)[0];
+      s = s.replace(UI_NOISE, " ");
+      s = s.replace(/\b(card\s*number|expiry\s*date|security\s*code|billing\s*address)\b.*/i, " ");
+      s = s.replace(/[^A-Za-z\s.'-]/g, " ");
+      s = s.replace(/\s+/g, " ").trim();
+      // Prefer continuous uppercase name tokens (common on card screenshots)
+      const caps = s.match(/\b[A-Z]{2,}(?:\s+[A-Z]{2,}){1,8}\b/);
+      if (caps) return caps[0].trim();
+      // Title-case fallback
+      const titled = s.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,8}\b/);
+      if (titled) return titled[0].trim();
+      return s;
+    }
+
+    function pickCardNumber(raw, lines) {
+      const labeled = valueAfterLabel(lines, [/^card\s*number$/i, /^卡号$/]);
+      const candidates = [];
+      if (labeled) candidates.push(labeled);
+      const matches = raw.replace(/[Oo]/g, "0").match(/\b(?:\d[ -]?){13,19}\b/g) || [];
+      candidates.push(...matches);
+      for (const c of candidates) {
+        const digits = String(c).replace(/\D/g, "");
+        if (digits.length >= 13 && digits.length <= 19) {
+          return {
+            numberPlain: digits,
+            numberSpaced: digits.replace(/(.{4})/g, "$1 ").trim()
+          };
+        }
+      }
+      return { numberPlain: "", numberSpaced: "" };
+    }
+
+    function pickExpiry(raw, lines) {
+      const labeled = valueAfterLabel(lines, [/^expiry\s*date$/i, /^expiry$/i, /^有效期$/]);
+      const pool = [labeled, raw].filter(Boolean).join("\n");
+      const expiryMatch = pool.match(/\b(0[1-9]|1[0-2])\s*[\/\-.]\s*(\d{2}|\d{4})\b/);
+      if (!expiryMatch) return { expiry: "", expiryMonth: "", expiryYear: "" };
+      const expiryMonth = expiryMatch[1];
+      let expiryYear = expiryMatch[2];
+      if (expiryYear.length === 4) expiryYear = expiryYear.slice(2);
+      return {
+        expiryMonth,
+        expiryYear,
+        expiry: `${expiryMonth}/${expiryYear}`
+      };
+    }
+
+    function pickCvv(raw, lines, numberPlain, expiryMonth, expiryYear) {
+      const labeled = valueAfterLabel(lines, [/^security\s*code$/i, /^cvv$/i, /^cvc$/i, /^安全码$/]);
+      const fromLabel = (labeled.match(/\b(\d{3,4})\b/) || [])[1] || "";
+      const near = (raw.match(/(?:security\s*code|cvv|cvc|安全码)\s*[:：]?\s*(\d{3,4})\b/i) || [])[1] || "";
+      const candidates = [fromLabel, near].filter(Boolean);
+
+      // Only as last resort: isolated 3-digit tokens not part of card/expiry
+      if (!candidates.length) {
+        const threes = raw.match(/(?<!\d)(\d{3})(?!\d)/g) || [];
+        for (const t of threes) {
+          if (t === expiryMonth || t === expiryYear) continue;
+          if (numberPlain && numberPlain.includes(t)) continue;
+          candidates.push(t);
+        }
+      }
+
+      for (const c of candidates) {
+        if (/^\d{3,4}$/.test(c)) return c;
+      }
+      return "";
+    }
+
+    function fixUkPostcode(pc) {
+      if (!pc) return "";
+      let p = String(pc).toUpperCase().trim();
+      // OCR junk often seen in UK outward/inward codes
+      p = p.replace(/[^A-Z0-9\s]/g, ch => ({
+        "!": "S",
+        "|": "I",
+        "¡": "I",
+        "$": "S",
+        "§": "S",
+        "€": "E",
+        "£": "E",
+        "·": ""
+      }[ch] || "");
+      p = p.replace(/\s+/g, " ").trim();
+      const m = p.match(/^([A-Z]{1,2})([0-9O])([A-Z0-9]?)\s*([0-9O])([A-Z0-9]{2})$/);
+      if (!m) return p;
+      const letterize = (ch, asLetter) => {
+        if (!asLetter) {
+          if (ch === "O") return "0";
+          if (ch === "I" || ch === "L") return "1";
+          return ch;
+        }
+        if (ch === "0") return "O";
+        if (ch === "1") return "I";
+        if (ch === "5") return "S";
+        if (ch === "8") return "B";
+        return ch;
+      };
+      const a = m[1];
+      const b = letterize(m[2], false);
+      const c = m[3] ? (/^\d$/.test(m[3]) ? m[3] : letterize(m[3], true)) : "";
+      const d = letterize(m[4], false);
+      const e0 = letterize(m[5][0], true);
+      const e1 = letterize(m[5][1], true);
+      return `${a}${b}${c} ${d}${e0}${e1}`.replace(/\s+/g, " ").trim();
+    }
+
+    function cleanAddress(addr) {
+      let s = String(addr || "");
+      s = s.replace(UI_NOISE, " ");
+      s = s.replace(/\b(copy|copied)\b/gi, " ");
+      s = s.replace(/\s+/g, " ").trim();
+      s = s.replace(/\s*,\s*/g, ", ");
+      // Fix postcode fragment inside address
+      s = s.replace(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z0-9!]{2})\b/gi, m => fixUkPostcode(m));
+      return s.replace(/\s+,/g, ",").replace(/,\s*$/g, "").trim();
+    }
+
+    function pickAddress(raw, lines) {
+      let address = valueAfterLabel(lines, [/^billing\s*address$/i, /^账单地址$/]);
+      if (!address) {
+        // Multi-line grab after billing label
+        for (let i = 0; i < lines.length; i++) {
+          if (!isLabelLine(lines[i], [/^billing\s*address$/i, /^账单地址$/])) continue;
+          const parts = [];
+          for (let j = i + 1; j < lines.length && parts.length < 4; j++) {
+            if (isJunkLine(lines[j])) continue;
+            if (isLabelLine(lines[j], [/^cardholder/i, /^card\s*number/i, /^expiry/i, /^security/i])) break;
+            parts.push(lines[j]);
+          }
+          address = parts.join(", ");
+          break;
+        }
+      }
+      if (!address) {
+        const uk = raw.match(/([^\n]*\b(?:Road|Street|Avenue|Lane|Close|House|Flat|Unit|St\.)\b[^\n]*)/i);
+        if (uk) address = uk[1];
+      }
+      return cleanAddress(address);
+    }
+
+    function parseCardText(text) {
+      const raw = normalizeOcrText(text);
+      const lines = raw.split("\n").map(s => s.replace(/\s+/g, " ").trim()).filter(Boolean);
+
+      const { numberPlain, numberSpaced } = pickCardNumber(raw, lines);
+      const { expiry, expiryMonth, expiryYear } = pickExpiry(raw, lines);
+      const cvv = pickCvv(raw, lines, numberPlain, expiryMonth, expiryYear);
+
+      let holder = valueAfterLabel(lines, [/^cardholder\s*name$/i, /^cardholder$/i, /^持卡人(姓名)?$/]);
+      if (!holder) {
+        const cap = lines.find(l =>
+          /^[A-Z][A-Z]+(?:\s+[A-Z][A-Z]+){1,6}$/.test(l) &&
+          !/CARD|DETAILS|BILLING|COPY|DONE|NUMBER|EXPIRY|SECURITY|ADDRESS/.test(l)
+        );
+        if (cap) holder = cap;
+      }
+      holder = cleanHolder(holder);
+
+      let address = pickAddress(raw, lines);
+      let postcode = "";
+      const postcodeMatch = (address || raw).match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z0-9!]{2})\b/i);
+      if (postcodeMatch) postcode = fixUkPostcode(postcodeMatch[1]);
+
+      const countryMatch = (address || raw).match(/\b(United Kingdom|Great Britain|England|UK)\b/i);
+      const country = countryMatch
+        ? (countryMatch[1].toLowerCase() === "uk" ? "United Kingdom" : countryMatch[1].replace(/\b\w/g, c => c.toUpperCase()).replace("United kingdom", "United Kingdom"))
+        : "";
+
+      let city = "";
+      const cityMatch = (address || "").match(/,\s*([A-Za-z][A-Za-z\s'-]+?)\s*,\s*[A-Z]{1,2}\d/i);
+      if (cityMatch) city = cityMatch[1].trim();
+      if (!city && /leicester/i.test(address || raw)) city = "Leicester";
+
+      let addressLine = "";
+      if (address) {
+        addressLine = address.split(",")[0].trim();
+        // Rebuild full address with fixed postcode when possible
+        if (postcode) {
+          const withoutPc = address.replace(/\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z0-9!]{2}\b/i, postcode);
+          address = cleanAddress(withoutPc);
+        }
+        if (country && !new RegExp(country, "i").test(address)) {
+          address = cleanAddress(address + ", " + country);
+        }
+      }
+
+      // Split address into form fields
+      let address1 = addressLine || "";
+      let address2 = "";
+      if (address) {
+        const parts = address.split(",").map(s => s.trim()).filter(Boolean);
+        // Drop trailing country / postcode / city from line1
+        const filtered = parts.filter(p =>
+          !/^(united kingdom|great britain|england|uk)$/i.test(p) &&
+          !(postcode && p.toUpperCase().replace(/\s+/g, " ") === postcode) &&
+          !(city && p.toLowerCase() === city.toLowerCase())
+        );
+        if (filtered.length) {
+          address1 = filtered[0];
+          if (filtered.length > 1) address2 = filtered.slice(1).join(", ");
+        }
+      }
+
+      // Tax / invoice helpers from raw text
+      let taxIdType = "";
+      if (/(?:GB\s*VAT|United Kingdom\s*\(GB VAT\)|税号类型)/i.test(raw) || /\bGB\d{9}\b/.test(raw) || country === "United Kingdom") {
+        taxIdType = "United Kingdom (GB VAT)";
+      }
+      let vat = "";
+      const vatMatch = raw.match(/\b(GB\s?\d{9}|GB\d{12})\b/i);
+      if (vatMatch) vat = vatMatch[1].replace(/\s+/g, "").toUpperCase();
+      let invoiceName = "";
+      const inv = raw.match(/(?:name on invoice|发票[^\n]{0,12}|发票上使用不同名称)\s*[:：]?\s*([^\n]+)/i);
+      if (inv) {
+        invoiceName = inv[1].replace(/\b(copy|optional|可选)\b/gi, " ").replace(/\s+/g, " ").trim();
+      }
+      // CJK invoice name line
+      if (!invoiceName) {
+        const cjk = lines.find(l => /[\u4e00-\u9fff]/.test(l) && l.length >= 2 && l.length <= 40 && !/账单|付款|订阅|地址|税/.test(l));
+        if (cjk) invoiceName = cjk.replace(/\b(copy|optional)\b/gi, "").trim();
+      }
+      const company = "";
+
+      return {
+        holder, country, address1, address2, city, postcode, company,
+        taxIdType, vat, invoiceName, address,
+        numberSpaced, numberPlain, expiry, expiryMonth, expiryYear, cvv
+      };
+    }
+
+    function applyParsed(parsed) {
+      FIELDS.forEach(([k]) => { values[k] = ""; });
+      Object.keys(parsed || {}).forEach(k => {
+        if (parsed[k]) values[k] = parsed[k];
+      });
+      renderFields();
+    }
+
+    function allText() {
+      return FIELDS.map(([key, label]) => `${label}：${values[key] || ""}`).join("\n");
+    }
+
+    const drop = document.getElementById("drop");
+    const preview = document.getElementById("preview");
+    const emptyHint = document.getElementById("emptyHint");
+    let currentFile = null;
+    let previewUrl = "";
+
+    function showPreview(f) {
+      currentFile = f;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = URL.createObjectURL(f);
+      preview.src = previewUrl;
+      preview.style.display = "block";
+      emptyHint.style.display = "none";
+      drop.classList.add("drag");
+      setTimeout(() => drop.classList.remove("drag"), 400);
+    }
+
+    function isTypingTarget(el) {
+      if (!el) return false;
+      if (el === drop || (drop && drop.contains(el) && el !== document.getElementById("raw"))) {
+        // drop zone is contenteditable but meant for image paste only
+        if (el === drop || el.id === "emptyHint" || el.id === "preview") return false;
+      }
+      const tag = (el.tagName || "").toLowerCase();
+      return tag === "textarea" || (tag === "input" && el.type !== "file" && el.type !== "button");
+    }
+
+    function fileFromClipboardEvent(e) {
+      const cd = e && e.clipboardData;
+      if (!cd) return null;
+
+      // 1) items (Chrome / most browsers)
+      try {
+        const items = cd.items ? Array.from(cd.items) : [];
+        for (const item of items) {
+          const type = (item.type || "").toLowerCase();
+          if (type.startsWith("image/")) {
+            const f = item.getAsFile && item.getAsFile();
+            if (f) return f;
+          }
+        }
+      } catch (_) {}
+
+      // 2) files list (Firefox sometimes)
+      try {
+        const files = cd.files ? Array.from(cd.files) : [];
+        const img = files.find(f => (f.type || "").startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || ""));
+        if (img) return img;
+      } catch (_) {}
+
+      return null;
+    }
+
+    function isLocalHttp() {
+      return location.protocol === "http:" && (location.hostname === "127.0.0.1" || location.hostname === "localhost");
+    }
+
+    async function fileFromLocalServerClipboard() {
+      if (!isLocalHttp()) return null;
+      const res = await fetch("/api/clipboard-image?t=" + Date.now(), { cache: "no-store" });
+      if (res.status === 204) {
+        throw new Error("剪贴板里没有图片。请先 Win+Shift+S 截图，再点「从剪贴板读取」。");
+      }
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw new Error(msg || ("本机剪贴板读取失败 (" + res.status + ")"));
+      }
+      const blob = await res.blob();
+      if (!blob || !blob.size) {
+        throw new Error("剪贴板图片为空，请重新截图后再试。");
+      }
+      return new File([blob], "clipboard.png", { type: blob.type || "image/png" });
+    }
+
+    async function fileFromClipboardApi() {
+      // Prefer Windows-side clipboard via local server (bypasses browser paste blocks)
+      try {
+        const local = await fileFromLocalServerClipboard();
+        if (local) return local;
+      } catch (err) {
+        if (isLocalHttp()) throw err;
+      }
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        throw new Error("浏览器不支持直接读剪贴板，请改用 Ctrl+V、拖入或「选择图片」。");
+      }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = (item.types || []).find(t => String(t).startsWith("image/"));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        const ext = type.split("/")[1] || "png";
+        return new File([blob], "clipboard." + ext, { type: type });
+      }
+      throw new Error("剪贴板里没有图片。请先复制截图，再点「从剪贴板读取」。");
+    }
+
+    async function handlePasteEvent(e) {
+      // Always try image first; only ignore when typing in raw/fields text boxes
+      if (isTypingTarget(e.target) && e.target.id === "raw") return;
+      if (isTypingTarget(e.target) && e.target.tagName === "INPUT" && e.target.closest("#fields")) return;
+
+      let file = fileFromClipboardEvent(e);
+      if (file) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Clear any text accidentally pasted into contenteditable drop
+        sanitizeDropDom();
+        acceptImage(file, true);
+        return;
+      }
+
+      // Firefox / file:// fallback: Clipboard API needs a user gesture; paste counts
+      if (navigator.clipboard && navigator.clipboard.read) {
+        try {
+          file = await fileFromClipboardApi();
+          e.preventDefault();
+          e.stopPropagation();
+          sanitizeDropDom();
+          acceptImage(file, true);
+          return;
+        } catch (err) {
+          // fall through to message
+          console.warn(err);
+        }
+      }
+
+      if (!isTypingTarget(e.target)) {
+        e.preventDefault();
+        sanitizeDropDom();
+        toast("粘贴不到图片时，请点「选择图片」或「从剪贴板读取」");
+        setStatus("若 Ctrl+V 无效（常见于本地 HTML + 火狐），请用「选择图片」或「从剪贴板读取」。");
+      }
+    }
+
+    function sanitizeDropDom() {
+      // Keep only emptyHint + preview; remove any pasted text nodes/HTML
+      Array.from(drop.childNodes).forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.id === "emptyHint" || node.id === "preview") return;
+          node.remove();
+        } else {
+          node.remove();
+        }
+      });
+      drop.querySelectorAll("br,div,span,img:not(#preview),font").forEach(n => {
+        if (n.id === "preview") return;
+        n.remove();
+      });
+    }
+
+    async function preprocessImage(file) {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.max(2, Math.min(3, 1400 / Math.max(bmp.width, 1)));
+      const w = Math.round(bmp.width * scale);
+      const h = Math.round(bmp.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const img = ctx.getImageData(0, 0, w, h);
+      const d = img.data;
+      // Grayscale + mild contrast boost; keeps text sharper for Tesseract
+      for (let i = 0; i < d.length; i += 4) {
+        let y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        y = (y - 128) * 1.35 + 128;
+        if (y < 0) y = 0;
+        if (y > 255) y = 255;
+        // Soft threshold toward binary without crushing thin glyphs
+        if (y > 185) y = 255;
+        else if (y < 95) y = 0;
+        d[i] = d[i + 1] = d[i + 2] = y;
+      }
+      ctx.putImageData(img, 0, 0);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+      return blob || file;
+    }
+
+    async function recognizeImage(f, auto) {
+      if (!f) {
+        toast("请先粘贴图片");
+        setStatus("还没有图片。复制截图后按 Ctrl+V。");
+        return;
+      }
+      if (!window.Tesseract) {
+        setStatus("识别库未加载，请检查网络后刷新。");
+        toast("识别库未加载");
+        return;
+      }
+      setStatus(auto ? "已粘贴，正在识别…" : "正在识别，请稍候…");
+      try {
+        const prepared = await preprocessImage(f);
+        const result = await Tesseract.recognize(prepared, "eng", {
+          logger: m => {
+            if (m.status === "recognizing text" && m.progress) {
+              setStatus("识别中 " + Math.round(m.progress * 100) + "%");
+            }
+          },
+          tessedit_pageseg_mode: "6"
+        });
+        const text = (result.data && result.data.text || "").trim();
+        document.getElementById("raw").value = text;
+        applyParsed(parseCardText(text));
+        setStatus("识别完成，已按字段分类。不准的项可以直接改。");
+        toast("识别完成");
+      } catch (err) {
+        console.error(err);
+        setStatus("识别失败，可把文字粘贴到下方原文框再分类。");
+        toast("识别失败");
+      }
+    }
+
+    function acceptImage(f, autoOcr) {
+      if (!f) return;
+      showPreview(f);
+      toast("已粘贴图片");
+      if (autoOcr) recognizeImage(f, true);
+      else setStatus("图片已就绪，可点「重新识别」。");
+    }
+
+    drop.addEventListener("click", () => {
+      drop.focus();
+    });
+    drop.addEventListener("keydown", e => {
+      // Allow Ctrl/Meta+V only; block typed characters into contenteditable
+      const isPaste = (e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === "v";
+      if (!isPaste && !e.ctrlKey && !e.metaKey) e.preventDefault();
+    });
+    drop.addEventListener("input", () => sanitizeDropDom());
+    drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+    drop.addEventListener("drop", e => {
+      e.preventDefault();
+      drop.classList.remove("drag");
+      const list = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+      const f = list.find(x => (x.type || "").startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(x.name || ""));
+      if (f) acceptImage(f, true);
+      else toast("请拖入图片文件");
+    });
+
+    document.addEventListener("paste", handlePasteEvent, true);
+    drop.addEventListener("paste", handlePasteEvent);
+
+    const fileInput = document.getElementById("fileInput");
+    document.getElementById("pickBtn").addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
+      const f = fileInput.files && fileInput.files[0];
+      if (f) acceptImage(f, true);
+      fileInput.value = "";
+    });
+    document.getElementById("clipBtn").addEventListener("click", async () => {
+      setStatus("正在读取剪贴板…");
+      try {
+        const f = await fileFromClipboardApi();
+        acceptImage(f, true);
+      } catch (err) {
+        console.warn(err);
+        toast(err && err.message ? err.message : "读取剪贴板失败");
+        setStatus("读取剪贴板失败时，请改用「选择图片」或把截图拖进虚线框。");
+      }
+    });
+
+    document.getElementById("ocrBtn").addEventListener("click", () => recognizeImage(currentFile, false));
+    // Focus paste zone on load for quicker Ctrl+V
+    setTimeout(() => { try { drop.focus(); } catch (_) {} }, 50);
+
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      currentFile = null;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      previewUrl = "";
+      preview.removeAttribute("src");
+      preview.style.display = "none";
+      emptyHint.style.display = "block";
+      Object.keys(values).forEach(k => values[k] = "");
+      document.getElementById("raw").value = "";
+      renderFields();
+      setStatus("已清空。复制新截图后点「从剪贴板读取」或 Ctrl+V。");
+    });
+
+    (function () {
+      const warn = document.getElementById("fileWarn");
+      const ok = document.getElementById("okLocal");
+      if (location.protocol === "file:") {
+        if (warn) warn.style.display = "block";
+        setStatus("本地文件模式：请优先用「选择图片」或拖入。");
+      } else {
+        if (ok) ok.style.display = "block";
+        setStatus("复制截图后点「从剪贴板读取」，或 Ctrl+V。");
+      }
+    })();
+
+    function billingText() {
+      return [
+        "Full name: " + (values.holder || ""),
+        "Country: " + (values.country || ""),
+        "Address line 1: " + (values.address1 || ""),
+        "Address line 2: " + (values.address2 || ""),
+        "Town or city: " + (values.city || ""),
+        "Postal code: " + (values.postcode || ""),
+        "Business name: " + (values.company || ""),
+        "Tax ID type: " + (values.taxIdType || ""),
+        "VAT number: " + (values.vat || ""),
+        "Name on invoice: " + (values.invoiceName || "")
+      ].join("\n");
+    }
+    function payText() {
+      return [
+        "Card number: " + (values.numberSpaced || values.numberPlain || ""),
+        "Expiration: " + (values.expiry || ""),
+        "Security code: " + (values.cvv || "")
+      ].join("\n");
+    }
+    document.getElementById("copyAll").addEventListener("click", () => copyText(allText(), "全部分类"));
+    document.getElementById("copyBilling").addEventListener("click", () => copyText(billingText(), "账单信息"));
+    document.getElementById("copyPay").addEventListener("click", () => copyText(payText(), "付款信息"));
+    document.getElementById("copyCardCompact").addEventListener("click", () => copyText(values.numberPlain, "numberPlain"));
+    document.getElementById("copyAddress").addEventListener("click", () => copyText(values.address || values.address1, "address"));
+    document.getElementById("copyRaw").addEventListener("click", () => copyText(document.getElementById("raw").value, "原文"));
+    document.getElementById("parseRaw").addEventListener("click", () => {
+      applyParsed(parseCardText(document.getElementById("raw").value));
+      toast("已按原文重新分类");
+    });
+
+    renderFields();
+
+    // Self-check with the noisy OCR text pattern from screenshots
+    (function selfCheck() {
+      const sample = `Card details
+Cardholder name
+JANE EXAMPLE SMITH copy Card number
+4111 1111 1111 1111
+Expiry date
+09/31
+Security code
+214
+Billing address
+Unit 17 Iliffe House 13 Iliffe Avenue, Leicester, LE2 5L!, United Kingdom`;
+      const p = parseCardText(sample);
+      const ok =
+        p.holder === "JANE EXAMPLE SMITH" &&
+        p.numberPlain === "4111111111111111" &&
+        p.cvv === "214" &&
+        p.postcode === "LE2 5LS" &&
+        !/copy/i.test(p.holder);
+      console.log("[parseCardText self-check]", ok ? "PASS" : "FAIL", p);
+    })();
+  </script>
+</body>
+</html>
